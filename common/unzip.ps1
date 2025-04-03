@@ -1,6 +1,6 @@
 param (
-    [string]$InputDirectory = (Get-Location),             # Default to the current directory if not specified
-    [string]$DestinationDirectory = $null                 # Optional, if not specified, defaults to InputDirectory
+    [string]$InputDirectory,    # Root folder containing .zip files
+    [string]$OutputDirectory    # Folder for extracted files
 )
 
 # Validate input directory
@@ -9,42 +9,57 @@ if (-Not (Test-Path -Path $InputDirectory)) {
     exit
 }
 
-# Set DestinationDirectory to InputDirectory if not specified
-if (-not $DestinationDirectory) {
-    $DestinationDirectory = $InputDirectory
-}
-
-# Validate that the DestinationDirectory can be accessed or created
-if (-Not (Test-Path -Path $DestinationDirectory)) {
+# Validate or create output directory
+if (-Not (Test-Path -Path $OutputDirectory)) {
     try {
-        New-Item -Path $DestinationDirectory -ItemType Directory -ErrorAction Stop
-        Write-Output "Created destination directory at '$DestinationDirectory'."
+        New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
+        Write-Output "Created output directory '$OutputDirectory'."
     }
     catch {
-        Write-Error "Cannot create destination directory '$DestinationDirectory'."
+        Write-Error "Cannot create output directory '$OutputDirectory'."
         exit
     }
 }
 
-# Find all .zip files in the input directory
-$zipFiles = Get-ChildItem -Path $InputDirectory -Filter *.zip
+# Global variable to track total number of processed items
+$script:TotalProcessed = 0
 
-# Loop through each zip file and extract it
-foreach ($zipFile in $zipFiles) {
-    # Unzip the file's base name
-    $extractFolder = $zipFile.BaseName
+function Extract-ZipFilesRecursively {
+    param (
+        [string]$SourceFolder,    # Folder containing zip files
+        [string]$DestinationFolder # Folder to extract files into
+    )
 
-    # Create the full extraction path
-    $extractPath = Join-Path -Path $DestinationDirectory -ChildPath $extractFolder
+    # Find all zip files in the current folder (excluding the output directory)
+    $zipFiles = Get-ChildItem -Path $SourceFolder -Recurse -File -Filter *.zip
 
-    # Create the extraction directory if it does not exist
-    if (-Not (Test-Path -Path $extractPath)) {
-        New-Item -Path $extractPath -ItemType Directory
+    foreach ($zipFile in $zipFiles) {
+        # Create a folder for the extracted contents
+        $extractFolder = Join-Path -Path $DestinationFolder -ChildPath $zipFile.BaseName
+        if (-Not (Test-Path -Path $extractFolder)) {
+            New-Item -Path $extractFolder -ItemType Directory -Force | Out-Null
+        }
+
+        # Extract the zip file
+        Write-Output "Extracting $($zipFile.FullName) to $($extractFolder)"
+        try {
+            Expand-Archive -Path $zipFile.FullName -DestinationPath $extractFolder -Force
+            $script:TotalProcessed++ # Increment the counter for successfully processed item
+        }
+        catch {
+            Write-Error "Failed to extract $($zipFile.FullName): $($_.Exception.Message)"
+        }
+
+        # Check for nested zip files in the extracted folder
+        Extract-ZipFilesRecursively -SourceFolder $extractFolder -DestinationFolder $extractFolder
     }
 
-    # Unzip the file
-    Write-Output "Extracting $($zipFile.Name) to $($extractPath)"
-    Expand-Archive -Path $zipFile.FullName -DestinationPath $extractPath -Force
+    # Clean up: Remove .zip files from the output directory
+    Get-ChildItem -Path $DestinationFolder -Recurse -File -Filter *.zip | Remove-Item -Force
 }
 
+# Start the extraction process
+Extract-ZipFilesRecursively -SourceFolder $InputDirectory -DestinationFolder $OutputDirectory
+
 Write-Output "All zip files have been extracted."
+Write-Output "Total number of zip files processed: $script:TotalProcessed"
