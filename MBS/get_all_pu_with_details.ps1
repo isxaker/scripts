@@ -3,6 +3,7 @@ param(
 )
 
 $tenantId = ""
+#$tenantId = "zpnrb.onmicrosoft.com"
 $clientId = ""
 $clientSecret = ""
 
@@ -76,10 +77,10 @@ Write-Host "Policy ID for workload type ${WorkloadType}: $PolicyId" -ForegroundC
 # Select the URL based on detected workload type
 switch ($WorkloadType) {
     "OneDrive" {
-        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/oneDriveForBusinessProtectionPolicies/$PolicyId/driveProtectionUnit"
+        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/oneDriveForBusinessProtectionPolicies/$PolicyId/driveProtectionUnits"
     }
     "SharePoint" {
-        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/protectionUnits/microsoft.graph.siteProtectionUnit"
+        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/sharePointProtectionPolicies/$PolicyId/siteProtectionUnits"
     }
     "Exchange" {
         $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/exchangeProtectionPolicies/$PolicyId/mailboxProtectionUnits"
