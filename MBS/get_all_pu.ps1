@@ -1,5 +1,7 @@
 param(
-    [string]$WorkloadType  # Parameter for WorkloadType (SharePoint, OneDrive, Exchange)
+    [string]$WorkloadType,              # Specifies the type of workload (e.g., SharePoint, OneDrive, Exchange)
+    [bool]$OnlyCurrentPolicy = $true,   # Indicates whether to enumerate only using the current policy
+    [bool]$Detailed = $true             # Determines whether to fetch detailed information about an item under protection
 )
 
 $tenantId = ""
@@ -12,6 +14,9 @@ if (-not $WorkloadType) {
     Write-Host "WorkloadType is required. Specify SharePoint, OneDrive, or Exchange." -ForegroundColor Red
     exit
 }
+
+Write-Output "Detailed processing mode: $Detailed"
+Write-Output "Checking OnlyCurrentPolicy: $OnlyCurrentPolicy"
 
 # Prepare the body for the token request
 $tokenBody = @{
@@ -68,27 +73,49 @@ function GetPolicyIdByWorkloadType($accessToken, $WorkloadType) {
     }
 }
 
-# Determine the Policy ID based on Workload Type
-$PolicyId = GetPolicyIdByWorkloadType -accessToken $accessToken -WorkloadType $WorkloadType
+if($OnlyCurrentPolicy){
 
-# Print the Policy ID to debug
-Write-Host "Policy ID for workload type ${WorkloadType}: $PolicyId" -ForegroundColor Yellow
+    # Determine the Policy ID based on Workload Type
+    $PolicyId = GetPolicyIdByWorkloadType -accessToken $accessToken -WorkloadType $WorkloadType
 
-# Select the URL based on detected workload type
-switch ($WorkloadType) {
-    "OneDrive" {
-        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/oneDriveForBusinessProtectionPolicies/$PolicyId/driveProtectionUnits"
+    # Print the Policy ID to debug
+    Write-Host "Policy ID for workload type ${WorkloadType}: $PolicyId" -ForegroundColor Yellow
+
+    # Select the URL based on detected workload type
+    switch ($WorkloadType) {
+        "OneDrive" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/oneDriveForBusinessProtectionPolicies/$PolicyId/driveProtectionUnits"
+        }
+        "SharePoint" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/sharePointProtectionPolicies/$PolicyId/siteProtectionUnits"
+        }
+        "Exchange" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/exchangeProtectionPolicies/$PolicyId/mailboxProtectionUnits"
+        }
+        default {
+            Write-Host "Unsupported workload type detected: $WorkloadType" -ForegroundColor Red
+            exit
+        }
     }
-    "SharePoint" {
-        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/sharePointProtectionPolicies/$PolicyId/siteProtectionUnits"
+}
+else{
+    # Select the URL based on detected workload type
+    switch ($WorkloadType) {
+        "OneDrive" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/protectionUnits/microsoft.graph.driveProtectionUnit"
+        }
+        "SharePoint" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/protectionUnits/microsoft.graph.siteProtectionUnit"
+        }
+        "Exchange" {
+            $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/protectionUnits/microsoft.graph.mailboxProtectionUnit"
+        }
+        default {
+            Write-Host "Unsupported workload type detected: $WorkloadType" -ForegroundColor Red
+            exit
+        }
     }
-    "Exchange" {
-        $url = "https://graph.microsoft.com/v1.0/solutions/backupRestore/exchangeProtectionPolicies/$PolicyId/mailboxProtectionUnits"
-    }
-    default {
-        Write-Host "Unsupported workload type detected: $WorkloadType" -ForegroundColor Red
-        exit
-    }
+
 }
 
 Write-Host "Using URL: $url" -ForegroundColor Green
@@ -199,10 +226,12 @@ $pageCountUser = 0 # Index for tracking each protection unit
 foreach ($unit in $allResults) {
     Write-Host "Fetching details for protection unit, index: $pageCountUser" -ForegroundColor Green
 
-    if ($WorkloadType -eq "SharePoint") {
-        Get-SiteDetails -unit $unit -accessToken $accessToken
-    } else {
-        Get-UserDetails -unit $unit -accessToken $accessToken
+    if($Detailed){
+        if ($WorkloadType -eq "SharePoint") {
+            Get-SiteDetails -unit $unit -accessToken $accessToken
+        } else {
+            Get-UserDetails -unit $unit -accessToken $accessToken
+        }
     }
     
     # Add processed_index property
